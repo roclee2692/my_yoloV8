@@ -46,46 +46,6 @@ my_yolov8/
 - Clear folder layout and documented hyper-parameters for easy reproduction.
 
 > **Known limitation:** current dataset is left-hand dominant, so right-hand detection is less accurate. Future work: add balanced right-hand samples and fine-tune.
-## 🚀 使用说明
-
-### 训练模型
-```bash
-python scripts/train.py
-批量推理图片
-bash
-
-python scripts/predict.py --source data/test/images
-实时摄像头检测
-bash
-
-python scripts/realtime_cam.py
-评估模型
-bash
-
-python scripts/evaluate.py
-📊 结果展示
-训练曲线
-（完整曲线见 results/metrics/）
-
-
-推理示例
-<div align="center"> <img src="results/images/sample1.jpg" width="45%"> <img src="results/images/sample2.jpg" width="45%"> </div>
-⚙️ 模型权重
-best.pt — 训练后的最佳模型，已保存在 weights/。
-
-如果模型较大，可上传至网盘并在此处提供下载链接：
-Download best.pt (Google Drive)
-
-🚀 导出模型（ONNX / TensorRT）
-python
-
-from ultralytics import YOLO
-
-model = YOLO("weights/best.pt")
-model.export(format="onnx")      # or format="engine"
-📌 已知问题 & 后续优化
-数据集中左手样本较多，右手检测准确率较低。
-后续可补充右手样本并再次 fine-tune。
 
 摄像头推理略有卡顿，可尝试更轻量模型或降低分辨率。
 
