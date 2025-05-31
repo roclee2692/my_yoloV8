@@ -1,0 +1,10 @@
+path: D:/Pythonmodel/my_yolo_project/datasets
+train: D:/Pythonmodel/my_yolo_project/datasets/train/images
+val: D:/Pythonmodel/my_yolo_project/datasets/valid/images
+test: D:/Pythonmodel/my_yolo_project/datasets/test/images
+
+nc: 3
+names: ['Paper', 'Rock', 'Scissors']
+
+
+
