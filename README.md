@@ -10,31 +10,33 @@ Trained on a custom dataset (mainly left-hand samples) and reaches **mAP50 ≈ 0
 ## 📦 项目结构
 本项目结构简要如下（部分文件省略，仅展示主要部分）：
 
+```text
 my_yolov8/
-├── datasets/ # 数据集文件夹
-│ ├── Rock Paper Scissors SXSW/ # Roboflow 下载的原始数据集，含 README
-│ ├── test/ # 测试集
-│ ├── train/ # 训练集
-│ └── valid/ # 验证集
+├── datasets/                  # 数据集文件夹
+│   ├── Rock Paper Scissors SXSW/  # Roboflow 下载的原始数据集，含 README
+│   ├── test/                  # 测试集
+│   ├── train/                 # 训练集
+│   └── valid/                 # 验证集
 │
-├── results/ # 提取后的推理结果和训练指标图
+├── results/                   # 提取后的推理结果和训练指标图
 │
-├── runs/ # YOLO 自动生成的完整训练记录（可选上传）
-│ └── detect/...
+├── runs/                      # YOLO 自动生成的完整训练记录（可选上传）
+│   └── detect/...
 │
-├── scripts/ # Python 脚本
-│ ├── train.py # 模型训练脚本
-│ ├── 推理测试.py # 批量图片推理脚本
-│ ├── 实时摄像头测试.py # 实时检测脚本
-│ └── 评估模型.py # 模型评估脚本
+├── scripts/                   # Python 脚本
+│   ├── train.py               # 模型训练脚本
+│   ├── 推理测试.py             # 批量图片推理脚本
+│   ├── 实时摄像头测试.py        # 实时检测脚本
+│   └── 评估模型.py             # 模型评估脚本
 │
-├── weights/ # 模型权重
-│ └── best.pt # 训练出的最佳模型
+├── weights/                   # 模型权重
+│   └── best.pt                # 训练出的最佳模型
 │
-├── data.yaml # YOLO 数据集配置文件
-├── README.md # 项目说明文件
-├── requirements.txt # Python 依赖
-└── .gitignore # Git 忽略规则
+├── data.yaml                  # YOLO 数据集配置文件
+├── README.md                  # 项目说明文件
+├── requirements.txt           # Python 依赖
+└── .gitignore                 # Git 忽略规则
+
 > 💡 **完整训练结果位于 YOLO 自动生成的 `runs/` 文件夹，为简洁展示，仅提取部分结果到 `results/`。**
 
 > 🔍 数据集原始文件夹 `Rock Paper Scissors SXSW` 来自 Roboflow，包含 README 文件说明来源。
