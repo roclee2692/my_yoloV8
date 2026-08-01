@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from people_flow.errors import ConfigurationError
 
+TrackerName = Literal["bytetrack.yaml", "botsort.yaml"]
+
 
 class StrictConfigModel(BaseModel):
     """Base model that rejects undocumented configuration keys."""
@@ -52,6 +54,31 @@ class AppConfig(StrictConfigModel):
         if not normalized:
             raise ValueError("project_name must not be blank")
         return normalized
+
+
+class RunConfig(StrictConfigModel):
+    """Validated arguments for a Phase 3 video tracking run."""
+
+    source: Path
+    model: str = Field(min_length=1)
+    tracker: TrackerName
+    classes: tuple[int, ...] = (0,)
+    output_dir: Path
+    weights_dir: Path = Path("weights")
+    device: str = Field(default="cpu", min_length=1)
+    confidence: float = Field(default=0.25, ge=0.0, le=1.0)
+    iou: float = Field(default=0.7, ge=0.0, le=1.0)
+    imgsz: int = Field(default=640, ge=32, le=4096)
+    overwrite: bool = False
+
+    @field_validator("classes")
+    @classmethod
+    def validate_person_only(cls, value: tuple[int, ...]) -> tuple[int, ...]:
+        """Keep the Phase 3 pipeline strictly limited to the COCO person class."""
+
+        if value != (0,):
+            raise ValueError("People Flow only supports COCO person class 0")
+        return value
 
 
 def resolve_path(value: Path, *, base_dir: Path) -> Path:

@@ -4,17 +4,19 @@
 
 ## 中文
 
-### 当前状态：V2 Phase 2
+### 当前状态：V2 Phase 3
 
-本分支已经建立可安装、可测试的 `src` layout 工程骨架。当前阶段只包含：
+本分支已经建立可安装、可测试的 `src` layout，并实现最小可运行的人体检测与多目标跟踪管线：
 
 - 严格校验的基础 YAML 配置；
-- `people-flow` 命令行入口及配置检查命令；
-- 检测、跟踪、计数、数据集、评测、输出和可视化模块边界；
-- 无 GPU、无模型下载的单元测试和 GitHub Actions；
+- `people-flow` 命令行入口、配置检查和 `run` 命令；
+- YOLOv8n/YOLO26n 官方权重的校验下载及明确失败处理；
+- ByteTrack/BoT-SORT 切换、person-only 过滤和持久 Track ID；
+- 标注视频、轨迹 CSV、运行配置、运行日志和性能 JSON；
+- 无 GPU、无模型下载的 CI 单元与微型视频集成测试；
 - V1 历史代码与数据来源说明的 `legacy/` 归档。
 
-检测、跟踪、视频输出和短视频集成管线将在 Phase 3 实现。当前没有下载或运行 YOLO26，也没有填写任何未经真实实验得到的指标。
+虚拟线计数、ROI、停留时间和 Ground Truth 评测仍按后续阶段实施。README 不填写未经真实实验得到的性能指标。
 
 ### V1 历史版本
 
@@ -52,7 +54,36 @@ people-flow validate-config --config configs/base.yaml
 python -m people_flow.cli validate-config --config configs/base.yaml
 ```
 
-`people-flow run` 将在 Phase 3 加入；现在调用未来阶段脚本会返回明确的“尚未实现”错误，而不会下载模型或伪造结果。
+下载并校验官方 YOLO26n 权重和小型人流样例：
+
+```bash
+python scripts/download_phase3_assets.py
+```
+
+使用 CPU + YOLO26n + ByteTrack：
+
+```bash
+people-flow run \
+  --source data/samples/People-counting-compressed.mp4 \
+  --model yolo26n.pt \
+  --tracker bytetrack.yaml \
+  --classes 0 \
+  --device cpu \
+  --output-dir runs/demo
+```
+
+也可以切换为 `yolov8n.pt` 或 `botsort.yaml`。模型名称不会静默回退；自定义模型必须提供真实存在的路径。重复使用已有输出目录时需明确增加 `--overwrite`。
+
+输出包括：
+
+```text
+runs/demo/
+├── annotated.mp4
+├── tracks.csv
+├── run_config.yaml
+├── runtime_metrics.json
+└── run.log
+```
 
 ### 质量检查
 
@@ -75,11 +106,11 @@ CI 不下载大型模型，也不依赖 GPU。
 
 ## English
 
-### Status: V2 Phase 2
+### Status: V2 Phase 3
 
-This branch now contains an installable and testable `src`-layout scaffold. It provides strict YAML configuration validation, a configuration-checking CLI, package boundaries, model-free tests, CI, and a clearly separated V1 legacy archive.
+This branch contains an installable `src`-layout application and the minimal person detection and multi-object tracking pipeline. It supports verified official YOLO26n/YOLOv8n acquisition, ByteTrack/BoT-SORT, person-only records, annotated MP4 output, CSV trajectories, effective configuration capture, logs, and runtime metrics.
 
-Detection, tracking, annotated video output, and the short-video pipeline are intentionally deferred to Phase 3. No YOLO26 model was downloaded or executed, and no performance result is claimed.
+Counting, ROI occupancy, dwell time, and Ground Truth evaluation remain intentionally deferred. No unverified performance result is claimed.
 
 ### Quick start
 
@@ -87,6 +118,8 @@ Detection, tracking, annotated video output, and the short-video pipeline are in
 python -m venv .venv
 pip install -e ".[dev]"
 people-flow validate-config --config configs/base.yaml
+python scripts/download_phase3_assets.py
+people-flow run --source data/samples/People-counting-compressed.mp4 --model yolo26n.pt --tracker bytetrack.yaml --classes 0 --device cpu --output-dir runs/demo
 ruff check .
 pytest -q
 python -m mypy src tests
@@ -96,4 +129,4 @@ The frozen Rock-Paper-Scissors V1 is available at `v1.0.0-rps-yolov8`. Dataset f
 
 ## License
 
-The repository currently retains its MIT project license. Dependency, model, and dataset licenses must also be followed; see the V1 audit in `docs/audit/V1_REPOSITORY_AUDIT.md`.
+The repository currently retains its MIT project license. Ultralytics code and models are offered under AGPL-3.0 and an Enterprise license; deploying the future web application must follow the selected Ultralytics license. The repository license does not override dependency, model, video, or dataset terms. See the official [Ultralytics licensing page](https://www.ultralytics.com/license) and the V1 audit in `docs/audit/V1_REPOSITORY_AUDIT.md`.

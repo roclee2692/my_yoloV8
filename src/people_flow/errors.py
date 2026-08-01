@@ -11,3 +11,23 @@ class ConfigurationError(PeopleFlowError):
 
 class FeatureNotAvailableError(PeopleFlowError):
     """Raised when a command belongs to a later implementation phase."""
+
+
+class AssetDownloadError(PeopleFlowError):
+    """Raised when an official model or sample asset cannot be verified."""
+
+
+class VideoSourceError(PeopleFlowError):
+    """Raised when a video cannot be opened or has invalid metadata."""
+
+
+class ModelInitializationError(PeopleFlowError):
+    """Raised when the requested model or compute device cannot initialize."""
+
+
+class PipelineError(PeopleFlowError):
+    """Raised when a pipeline run cannot safely continue."""
+
+
+class OutputError(PeopleFlowError):
+    """Raised when an output artifact cannot be created."""

@@ -19,7 +19,7 @@ def configure_logging(*, level: str = "INFO", log_file: Path | None = None) -> l
     if log_file is not None:
         resolved_log_file = log_file.expanduser().resolve()
         resolved_log_file.parent.mkdir(parents=True, exist_ok=True)
-        handlers.append(logging.FileHandler(resolved_log_file, encoding="utf-8"))
+        handlers.append(logging.FileHandler(resolved_log_file, mode="w", encoding="utf-8"))
 
     logging.basicConfig(
         level=numeric_level,

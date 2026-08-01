@@ -12,8 +12,12 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "my_yoloV8 contributors" }]
 dependencies = [
+  "lap>=0.5.12,<0.6",
+  "numpy>=2,<2.3",
+  "opencv-python>=4.11,<5",
   "pydantic>=2.10,<3",
   "PyYAML>=6.0,<7",
+  "ultralytics==8.4.114",
 ]
 
 [project.optional-dependencies]
@@ -61,4 +65,8 @@ exclude = ["^legacy/"]
 
 [[tool.mypy.overrides]]
 module = "yaml"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["cv2", "cv2.*", "torch", "torch.*", "ultralytics", "ultralytics.*"]
 ignore_missing_imports = true
