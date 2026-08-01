@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "people-flow-analytics"
+version = "2.0.0a0"
+description = "People flow analytics with YOLO26 and multi-object tracking"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "my_yoloV8 contributors" }]
+dependencies = [
+  "pydantic>=2.10,<3",
+  "PyYAML>=6.0,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.15,<2",
+  "pytest>=9.0,<10",
+  "ruff>=0.16,<0.17",
+  "types-PyYAML>=6.0.12",
+]
+
+[project.scripts]
+people-flow = "people_flow.cli:entrypoint"
+
+[project.urls]
+Repository = "https://github.com/roclee2692/my_yoloV8"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+markers = [
+  "slow: integration tests that may require local media or optional dependencies",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["src", "tests", "scripts"]
+extend-exclude = ["legacy"]
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "SIM", "UP"]
+
+[tool.ruff.format]
+quote-style = "double"
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unreachable = true
+exclude = ["^legacy/"]
+
+[[tool.mypy.overrides]]
+module = "yaml"
+ignore_missing_imports = true

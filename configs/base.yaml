@@ -1,0 +1,13 @@
+schema_version: 1
+project_name: people-flow-analytics
+seed: 42
+
+paths:
+  data_dir: data
+  runs_dir: runs
+  weights_dir: weights
+
+runtime:
+  device: cpu
+  workers: 4
+  log_level: INFO

@@ -1,0 +1,8 @@
+schema_version: 1
+model:
+  name: yolov8n
+  weights: yolov8n.pt
+  classes: [0]
+  confidence: 0.25
+  iou: 0.70
+  imgsz: 640
