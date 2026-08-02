@@ -1,8 +1,53 @@
 schema_version: 1
-experiment:
-  id: baseline
-  base_config: configs/base.yaml
-  model_config: configs/models/yolo26n.yaml
-  tracker_config: configs/trackers/bytetrack.yaml
-  source: data/samples/sample.mp4
-  output_dir: runs/experiments/baseline
+suite_id: baseline_v2_phase8
+seed: 42
+source: data/samples/People-counting-compressed.mp4
+output_root: runs/experiments
+weights_dir: weights
+device: "0"
+classes: [0]
+confidence: 0.25
+iou: 0.70
+imgsz: 640
+
+counting:
+  enabled: true
+  line:
+    p1: [100, 500]
+    p2: [1100, 500]
+    enter_side: positive
+  min_track_age: 5
+  min_displacement_pixels: 15
+  cooldown_frames: 30
+  max_track_gap_frames: 30
+
+roi:
+  enabled: true
+  name: entrance_area
+  points:
+    - [100, 100]
+    - [1100, 100]
+    - [1100, 650]
+    - [100, 650]
+  max_track_gap_frames: 30
+
+ground_truth:
+  mot_sequence: null
+  unavailable_reason: >-
+    The official sample video has no associated MOT Ground Truth; accuracy and
+    ID-switch metrics are unavailable rather than assumed to be zero.
+  person_class_ids: [1]
+  require_marked: true
+  min_visibility: 0.0
+  tracking_iou_threshold: 0.5
+
+experiments:
+  - id: A_yolov8n_bytetrack
+    model: yolov8n.pt
+    tracker: bytetrack.yaml
+  - id: B_yolo26n_bytetrack
+    model: yolo26n.pt
+    tracker: bytetrack.yaml
+  - id: C_yolo26n_botsort
+    model: yolo26n.pt
+    tracker: botsort.yaml
