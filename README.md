@@ -4,7 +4,7 @@
 
 ## 中文
 
-### 当前状态：V2 Phase 4
+### 当前状态：V2 Phase 5
 
 本分支已经建立可安装、可测试的 `src` layout，并实现最小可运行的人体检测与多目标跟踪管线：
 
@@ -17,9 +17,12 @@
 - MOT17 `seqinfo.ini`、完整图像序列与九列 Ground Truth 的严格读取；
 - MOT17 train/test 本地完整性校验及 JSON 摘要；
 - 按源 FPS 和分辨率转换 MP4，并逐帧回读证明输入/输出帧数一致；
+- 基于 Track ID 与脚点轨迹的有向虚拟线进出计数；
+- 最小轨迹年龄、最小位移、冷却帧、短时丢失恢复和同向去重；
+- 逐事件 `events.csv` 与 JPEG 证据帧；
 - V1 历史代码与数据来源说明的 `legacy/` 归档。
 
-虚拟线计数、ROI、停留时间和 Ground Truth 计数评测仍按后续阶段实施。README 不填写未经真实实验得到的性能指标。
+ROI、停留时间和 Ground Truth 计数评测仍按后续阶段实施。当前样例没有 Ground Truth，因此 README 不声明计数准确率。
 
 ### V1 历史版本
 
@@ -77,12 +80,34 @@ people-flow run \
 
 也可以切换为 `yolov8n.pt` 或 `botsort.yaml`。模型名称不会静默回退；自定义模型必须提供真实存在的路径。重复使用已有输出目录时需明确增加 `--overwrite`。
 
+启用有向虚拟线计数：
+
+```bash
+people-flow run \
+  --source data/samples/People-counting-compressed.mp4 \
+  --model yolo26n.pt \
+  --tracker bytetrack.yaml \
+  --classes 0 \
+  --device 0 \
+  --output-dir runs/counting_demo \
+  --counting-line 100 500 1100 500 \
+  --enter-side positive \
+  --min-track-age 5 \
+  --min-displacement-pixels 15 \
+  --cooldown-frames 30 \
+  --max-track-gap-frames 30
+```
+
+`p1 -> p2` 定义有向有限线段。坐标位于有向线左侧时为 `positive`，右侧时为 `negative`；交换 `--enter-side` 即可交换 enter/exit 定义。只有脚点运动线段实际穿过有限计数线、满足轨迹年龄与位移阈值时才产生事件。
+
 输出包括：
 
 ```text
 runs/demo/
 ├── annotated.mp4
 ├── tracks.csv
+├── events.csv                 # 仅启用计数时生成
+├── evidence/                  # 每个计数事件的证据帧
 ├── run_config.yaml
 ├── runtime_metrics.json
 └── run.log
@@ -122,11 +147,11 @@ CI 不下载大型模型，也不依赖 GPU。
 
 ## English
 
-### Status: V2 Phase 4
+### Status: V2 Phase 5
 
-This branch contains an installable `src`-layout application, the minimal person detection and tracking pipeline, and strict MOT17 support. It reads sequence metadata and unfiltered nine-column Ground Truth, validates local train/test splits, and converts numerically ordered images to MP4 using source metadata. A successful conversion is decoded end to end to verify frame parity, FPS, and resolution.
+This branch contains an installable `src`-layout application, the person detection and tracking pipeline, strict MOT17 support, and directional line-crossing counts based on persistent Track IDs and bottom-center foot points. Count events include CSV evidence records and JPEG evidence frames.
 
-Counting, ROI occupancy, dwell time, and Ground Truth evaluation remain intentionally deferred. No unverified performance result is claimed.
+ROI occupancy, dwell time, and Ground Truth evaluation remain intentionally deferred. The bundled sample has no Ground Truth, so no counting-accuracy claim is made.
 
 ### Quick start
 
@@ -136,6 +161,7 @@ pip install -e ".[dev]"
 people-flow validate-config --config configs/base.yaml
 python scripts/download_phase3_assets.py
 people-flow run --source data/samples/People-counting-compressed.mp4 --model yolo26n.pt --tracker bytetrack.yaml --classes 0 --device cpu --output-dir runs/demo
+people-flow run --source data/samples/People-counting-compressed.mp4 --model yolo26n.pt --tracker bytetrack.yaml --classes 0 --device 0 --output-dir runs/counting_demo --counting-line 100 500 1100 500 --enter-side positive
 python scripts/prepare_mot17.py --root data/raw/MOT17 --split train
 python scripts/mot_sequence_to_video.py --sequence data/raw/MOT17/train/MOT17-04-SDP --output data/interim/MOT17-04-SDP.mp4
 ruff check .

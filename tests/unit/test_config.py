@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from people_flow.config import load_config, resolve_path
+from people_flow.config import CountingSettings, load_config, resolve_path
 from people_flow.errors import ConfigurationError
 
 
@@ -58,3 +58,12 @@ def test_resolve_path_uses_explicit_base_directory(tmp_path: Path) -> None:
     resolved = resolve_path(Path("data/samples"), base_dir=tmp_path)
 
     assert resolved == (tmp_path / "data" / "samples").resolve()
+
+
+def test_counting_requires_line_when_enabled() -> None:
+    """Schema validation should prevent an enabled counter without geometry."""
+
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="counting.line is required"):
+        CountingSettings(enabled=True)

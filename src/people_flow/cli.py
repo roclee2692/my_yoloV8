@@ -1,4 +1,4 @@
-"""Command-line entry point for the Phase 2 scaffold."""
+"""Command-line entry point for people-flow processing and configuration."""
 
 from __future__ import annotations
 
@@ -10,7 +10,14 @@ from typing import cast
 from pydantic import ValidationError
 
 from people_flow import __version__
-from people_flow.config import RunConfig, TrackerName, load_config
+from people_flow.config import (
+    CountingLineSettings,
+    CountingSettings,
+    RunConfig,
+    SideName,
+    TrackerName,
+    load_config,
+)
 from people_flow.errors import ConfigurationError, PeopleFlowError
 from people_flow.logging import configure_logging
 from people_flow.pipeline import run_pipeline
@@ -27,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate_parser = subparsers.add_parser(
         "validate-config",
-        help="validate a Phase 2 base configuration",
+        help="validate a base project configuration",
     )
     validate_parser.add_argument("--config", required=True, type=Path)
     subparsers.add_parser("version", help="show the package version")
@@ -48,6 +55,20 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--iou", type=float, default=0.7)
     run_parser.add_argument("--imgsz", type=int, default=640)
     run_parser.add_argument("--overwrite", action="store_true")
+    run_parser.add_argument(
+        "--counting-line",
+        nargs=4,
+        type=float,
+        metavar=("X1", "Y1", "X2", "Y2"),
+        help="enable directional counting with a finite p1-to-p2 line",
+    )
+    run_parser.add_argument("--enter-side", choices=("positive", "negative"), default="positive")
+    run_parser.add_argument("--min-track-age", type=int, default=5)
+    run_parser.add_argument("--min-displacement-pixels", type=float, default=15.0)
+    run_parser.add_argument("--cooldown-frames", type=int, default=30)
+    run_parser.add_argument(
+        "--max-track-gap-frames", type=int, default=30, help="retain state across short ID gaps"
+    )
     return parser
 
 
@@ -68,6 +89,21 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "run":
         try:
+            line_values = cast(list[float] | None, args.counting_line)
+            counting = CountingSettings()
+            if line_values is not None:
+                counting = CountingSettings(
+                    enabled=True,
+                    line=CountingLineSettings(
+                        p1=(line_values[0], line_values[1]),
+                        p2=(line_values[2], line_values[3]),
+                        enter_side=cast(SideName, args.enter_side),
+                    ),
+                    min_track_age=cast(int, args.min_track_age),
+                    min_displacement_pixels=cast(float, args.min_displacement_pixels),
+                    cooldown_frames=cast(int, args.cooldown_frames),
+                    max_track_gap_frames=cast(int, args.max_track_gap_frames),
+                )
             run_config = RunConfig(
                 source=cast(Path, args.source),
                 model=cast(str, args.model),
@@ -80,6 +116,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 iou=cast(float, args.iou),
                 imgsz=cast(int, args.imgsz),
                 overwrite=cast(bool, args.overwrite),
+                counting=counting,
             )
             result = run_pipeline(run_config)
         except (ValidationError, PeopleFlowError) as exc:

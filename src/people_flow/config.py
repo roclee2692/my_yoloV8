@@ -7,11 +7,12 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from people_flow.errors import ConfigurationError
 
 TrackerName = Literal["bytetrack.yaml", "botsort.yaml"]
+SideName = Literal["positive", "negative"]
 
 
 class StrictConfigModel(BaseModel):
@@ -36,14 +37,50 @@ class RuntimeSettings(StrictConfigModel):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
+class CountingLineSettings(StrictConfigModel):
+    """Directed virtual line and semantic enter side."""
+
+    p1: tuple[float, float]
+    p2: tuple[float, float]
+    enter_side: SideName = "positive"
+
+    @model_validator(mode="after")
+    def validate_distinct_endpoints(self) -> CountingLineSettings:
+        """Reject a zero-length virtual line."""
+
+        if self.p1 == self.p2:
+            raise ValueError("counting line p1 and p2 must be different")
+        return self
+
+
+class CountingSettings(StrictConfigModel):
+    """Track-based directional counting thresholds."""
+
+    enabled: bool = False
+    line: CountingLineSettings | None = None
+    min_track_age: int = Field(default=5, ge=2)
+    min_displacement_pixels: float = Field(default=15.0, ge=0.0)
+    cooldown_frames: int = Field(default=30, ge=0)
+    max_track_gap_frames: int = Field(default=30, ge=0)
+
+    @model_validator(mode="after")
+    def validate_enabled_line(self) -> CountingSettings:
+        """Require explicit geometry whenever counting is enabled."""
+
+        if self.enabled and self.line is None:
+            raise ValueError("counting.line is required when counting.enabled is true")
+        return self
+
+
 class AppConfig(StrictConfigModel):
-    """Validated Phase 2 application configuration."""
+    """Validated application configuration."""
 
     schema_version: Literal[1]
     project_name: str = Field(min_length=1)
     seed: int = Field(ge=0, le=4_294_967_295)
     paths: PathSettings
     runtime: RuntimeSettings
+    counting: CountingSettings
 
     @field_validator("project_name")
     @classmethod
@@ -70,6 +107,7 @@ class RunConfig(StrictConfigModel):
     iou: float = Field(default=0.7, ge=0.0, le=1.0)
     imgsz: int = Field(default=640, ge=32, le=4096)
     overwrite: bool = False
+    counting: CountingSettings = Field(default_factory=CountingSettings)
 
     @field_validator("classes")
     @classmethod

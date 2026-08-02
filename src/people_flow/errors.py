@@ -29,6 +29,10 @@ class MotConversionError(PeopleFlowError):
     """Raised when a MOT image sequence cannot be converted without frame loss."""
 
 
+class CountingError(PeopleFlowError):
+    """Raised when counting geometry, state, or event evidence is invalid."""
+
+
 class ModelInitializationError(PeopleFlowError):
     """Raised when the requested model or compute device cannot initialize."""
 

@@ -1,9 +1,11 @@
-"""Phase 3 person detection and multi-object tracking pipeline."""
+"""Person tracking and directional people-counting pipeline."""
 
 from __future__ import annotations
 
 import platform
+import shutil
 import time
+from contextlib import ExitStack
 from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
@@ -15,6 +17,8 @@ import yaml
 from people_flow import __version__
 from people_flow.assets import resolve_model_path
 from people_flow.config import RunConfig, resolve_path
+from people_flow.counting.geometry import DirectedLine, LineSide
+from people_flow.counting.line_counter import LineCounter
 from people_flow.datasets.video_source import Frame, VideoSource
 from people_flow.detection.yolo_detector import YoloDetector
 from people_flow.errors import OutputError, PipelineError
@@ -26,6 +30,8 @@ from people_flow.evaluation.runtime_metrics import (
 )
 from people_flow.logging import configure_logging
 from people_flow.outputs.csv_writer import TrackCsvWriter
+from people_flow.outputs.event_writer import EventCsvWriter
+from people_flow.outputs.evidence_writer import write_evidence_frame
 from people_flow.outputs.json_writer import write_json
 from people_flow.outputs.video_writer import AnnotatedVideoWriter
 from people_flow.tracking.track_record import TrackRecord
@@ -36,6 +42,7 @@ _OUTPUT_NAMES = (
     "annotated.mp4",
     "tracks.csv",
     "run_config.yaml",
+    "events.csv",
     "runtime_metrics.json",
     "run.log",
 )
@@ -56,9 +63,14 @@ class PipelineResult:
     annotated_video: Path
     tracks_csv: Path
     run_config: Path
+    events_csv: Path | None
+    evidence_dir: Path | None
     runtime_metrics: Path
     run_log: Path
     metrics: RuntimeMetrics
+
+    total_enter: int
+    total_exit: int
 
 
 def _prepare_output_directory(output_dir: Path, *, overwrite: bool) -> Path:
@@ -67,11 +79,20 @@ def _prepare_output_directory(output_dir: Path, *, overwrite: bool) -> Path:
     resolved = output_dir.expanduser().resolve()
     resolved.mkdir(parents=True, exist_ok=True)
     existing = [resolved / name for name in _OUTPUT_NAMES if (resolved / name).exists()]
+    evidence_dir = resolved / "evidence"
+    if evidence_dir.is_dir() and any(evidence_dir.iterdir()):
+        existing.append(evidence_dir)
     if existing and not overwrite:
         names = ", ".join(path.name for path in existing)
         raise OutputError(
             f"Output files already exist in {resolved}: {names}. Use --overwrite to replace them."
         )
+    if overwrite and evidence_dir.exists():
+        try:
+            evidence_dir.relative_to(resolved)
+            shutil.rmtree(evidence_dir)
+        except OSError as exc:
+            raise OutputError(f"Unable to clear evidence directory: {evidence_dir}") from exc
     return resolved
 
 
@@ -97,6 +118,7 @@ def _write_run_config(
         "confidence": config.confidence,
         "iou": config.iou,
         "imgsz": config.imgsz,
+        "counting": config.counting.model_dump(mode="json"),
         "software": {
             "people_flow": __version__,
             "python": platform.python_version(),
@@ -112,10 +134,32 @@ def _write_run_config(
     return path
 
 
+def _build_line_counter(config: RunConfig) -> LineCounter | None:
+    """Build a counter only when explicit line geometry enables counting."""
+
+    settings = config.counting
+    if not settings.enabled:
+        return None
+    if settings.line is None:
+        raise PipelineError("Counting is enabled but no counting line was configured")
+    directed_line = DirectedLine(
+        p1=settings.line.p1,
+        p2=settings.line.p2,
+        enter_side=LineSide(settings.line.enter_side),
+    )
+    return LineCounter(
+        directed_line,
+        min_track_age=settings.min_track_age,
+        min_displacement_pixels=settings.min_displacement_pixels,
+        cooldown_frames=settings.cooldown_frames,
+        max_track_gap_frames=settings.max_track_gap_frames,
+    )
+
+
 def run_pipeline(
     config: RunConfig, *, tracker_runner: FrameTracker | None = None
 ) -> PipelineResult:
-    """Run person-only tracking on a local video and write all Phase 3 artifacts."""
+    """Run person-only tracking and optional directional counting on a local video."""
 
     source = resolve_path(config.source, base_dir=Path.cwd())
     output_dir = _prepare_output_directory(config.output_dir, overwrite=config.overwrite)
@@ -142,6 +186,9 @@ def run_pipeline(
         source=source,
         model_path=model_path,
     )
+    line_counter = _build_line_counter(config)
+    events_path = output_dir / "events.csv" if line_counter is not None else None
+    evidence_dir = output_dir / "evidence" if line_counter is not None else None
     reset_peak_gpu_memory(config.device)
     latencies_ms: list[float] = []
     processed_frames = 0
@@ -152,15 +199,21 @@ def run_pipeline(
         metadata = video.metadata
         if metadata is None:
             raise PipelineError("Video metadata was unavailable after opening the source")
-        with (
-            AnnotatedVideoWriter(
-                annotated_path,
-                fps=metadata.fps,
-                width=metadata.width,
-                height=metadata.height,
-            ) as video_writer,
-            TrackCsvWriter(tracks_path) as csv_writer,
-        ):
+        with ExitStack() as stack:
+            video_writer = stack.enter_context(
+                AnnotatedVideoWriter(
+                    annotated_path,
+                    fps=metadata.fps,
+                    width=metadata.width,
+                    height=metadata.height,
+                )
+            )
+            csv_writer = stack.enter_context(TrackCsvWriter(tracks_path))
+            event_writer = (
+                stack.enter_context(EventCsvWriter(events_path))
+                if events_path is not None
+                else None
+            )
             for video_frame in video:
                 frame_start = time.perf_counter()
                 records = tracker_runner.process(
@@ -169,7 +222,40 @@ def run_pipeline(
                     timestamp_ms=video_frame.timestamp_ms,
                 )
                 csv_writer.write(records)
-                video_writer.write(annotate_frame(video_frame.image, records))
+                events = (
+                    line_counter.process_frame(records, frame_id=video_frame.frame_id)
+                    if line_counter is not None
+                    else []
+                )
+                annotated = annotate_frame(
+                    video_frame.image,
+                    records,
+                    counting_line=line_counter.line if line_counter is not None else None,
+                    total_enter=line_counter.total_enter if line_counter is not None else 0,
+                    total_exit=line_counter.total_exit if line_counter is not None else 0,
+                )
+                if events:
+                    if event_writer is None or evidence_dir is None:
+                        raise PipelineError("Counting events have no configured output writer")
+                    persisted_events = []
+                    for event in events:
+                        filename = (
+                            f"{event.event_id}_frame_{event.frame_id:06d}_"
+                            f"track_{event.track_id}_{event.event_type}.jpg"
+                        )
+                        relative_evidence_path = Path("evidence") / filename
+                        write_evidence_frame(evidence_dir / filename, annotated)
+                        persisted_event = event.with_evidence_path(relative_evidence_path)
+                        persisted_events.append(persisted_event)
+                        logger.info(
+                            "Counted %s: track=%s frame=%s evidence=%s",
+                            persisted_event.event_type,
+                            persisted_event.track_id,
+                            persisted_event.frame_id,
+                            relative_evidence_path,
+                        )
+                    event_writer.write(persisted_events)
+                video_writer.write(annotated)
                 processed_frames += 1
                 latencies_ms.append((time.perf_counter() - frame_start) * 1000.0)
                 if processed_frames % 100 == 0:
@@ -199,12 +285,24 @@ def run_pipeline(
         metrics.processing_fps,
         output_dir,
     )
+    if line_counter is not None:
+        logger.info(
+            "Directional counts: enter=%s exit=%s events=%s",
+            line_counter.total_enter,
+            line_counter.total_exit,
+            events_path,
+        )
+
     return PipelineResult(
         output_dir=output_dir,
         annotated_video=annotated_path,
         tracks_csv=tracks_path,
         run_config=run_config_path,
+        events_csv=events_path,
+        evidence_dir=evidence_dir,
         runtime_metrics=metrics_path,
         run_log=run_log,
         metrics=metrics,
+        total_enter=line_counter.total_enter if line_counter is not None else 0,
+        total_exit=line_counter.total_exit if line_counter is not None else 0,
     )

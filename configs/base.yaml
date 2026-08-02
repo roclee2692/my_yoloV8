@@ -11,3 +11,14 @@ runtime:
   device: cpu
   workers: 4
   log_level: INFO
+
+counting:
+  enabled: false
+  line:
+    p1: [100, 500]
+    p2: [1100, 500]
+    enter_side: positive
+  min_track_age: 5
+  min_displacement_pixels: 15
+  cooldown_frames: 30
+  max_track_gap_frames: 30
