@@ -22,3 +22,13 @@ counting:
   min_displacement_pixels: 15
   cooldown_frames: 30
   max_track_gap_frames: 30
+
+roi:
+  enabled: false
+  name: entrance_area
+  points:
+    - [100, 100]
+    - [1100, 100]
+    - [1100, 650]
+    - [100, 650]
+  max_track_gap_frames: 30

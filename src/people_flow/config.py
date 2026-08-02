@@ -9,7 +9,8 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
-from people_flow.errors import ConfigurationError
+from people_flow.counting.geometry import PolygonRegion
+from people_flow.errors import ConfigurationError, CountingError
 
 TrackerName = Literal["bytetrack.yaml", "botsort.yaml"]
 SideName = Literal["positive", "negative"]
@@ -72,6 +73,38 @@ class CountingSettings(StrictConfigModel):
         return self
 
 
+class RoiSettings(StrictConfigModel):
+    """Polygon ROI and temporary Track-gap policy."""
+
+    enabled: bool = False
+    name: str = Field(default="entrance_area", min_length=1)
+    points: tuple[tuple[float, float], ...] = ()
+    max_track_gap_frames: int = Field(default=30, ge=0)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        """Normalize and reject blank ROI names."""
+
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("roi.name must not be blank")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_polygon(self) -> RoiSettings:
+        """Require and fully validate polygon geometry when configured."""
+
+        if self.enabled and not self.points:
+            raise ValueError("roi.points is required when roi.enabled is true")
+        if self.points:
+            try:
+                PolygonRegion(self.name, self.points)
+            except CountingError as exc:
+                raise ValueError(str(exc)) from exc
+        return self
+
+
 class AppConfig(StrictConfigModel):
     """Validated application configuration."""
 
@@ -81,6 +114,7 @@ class AppConfig(StrictConfigModel):
     paths: PathSettings
     runtime: RuntimeSettings
     counting: CountingSettings
+    roi: RoiSettings
 
     @field_validator("project_name")
     @classmethod
@@ -94,7 +128,7 @@ class AppConfig(StrictConfigModel):
 
 
 class RunConfig(StrictConfigModel):
-    """Validated arguments for a Phase 3 video tracking run."""
+    """Validated arguments for one people-flow video run."""
 
     source: Path
     model: str = Field(min_length=1)
@@ -108,11 +142,12 @@ class RunConfig(StrictConfigModel):
     imgsz: int = Field(default=640, ge=32, le=4096)
     overwrite: bool = False
     counting: CountingSettings = Field(default_factory=CountingSettings)
+    roi: RoiSettings = Field(default_factory=RoiSettings)
 
     @field_validator("classes")
     @classmethod
     def validate_person_only(cls, value: tuple[int, ...]) -> tuple[int, ...]:
-        """Keep the Phase 3 pipeline strictly limited to the COCO person class."""
+        """Keep the pipeline strictly limited to the COCO person class."""
 
         if value != (0,):
             raise ValueError("People Flow only supports COCO person class 0")

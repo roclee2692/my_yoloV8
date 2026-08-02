@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import cv2
+import numpy as np
 
-from people_flow.counting.geometry import DirectedLine
+from people_flow.counting.geometry import DirectedLine, PolygonRegion
 from people_flow.datasets.video_source import Frame
 from people_flow.tracking.track_record import TrackRecord
 
@@ -16,6 +17,8 @@ def annotate_frame(
     counting_line: DirectedLine | None = None,
     total_enter: int = 0,
     total_exit: int = 0,
+    roi_region: PolygonRegion | None = None,
+    roi_occupancy: int = 0,
 ) -> Frame:
     """Return a copy with tracks and optional directional-counting state."""
 
@@ -40,6 +43,22 @@ def annotate_frame(
             cv2.LINE_AA,
         )
 
+    if roi_region is not None:
+        vertices = np.asarray(roi_region.points, dtype=np.int32).reshape((-1, 1, 2))
+        roi_color = (0, 215, 255)
+        cv2.polylines(annotated, [vertices], True, roi_color, 3, cv2.LINE_AA)
+        anchor_x = max(12, min(round(point[0]) for point in roi_region.points))
+        anchor_y = max(48, min(round(point[1]) for point in roi_region.points) - 10)
+        cv2.putText(
+            annotated,
+            f"ROI {roi_region.name}: {roi_occupancy}",
+            (anchor_x, anchor_y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            roi_color,
+            2,
+            cv2.LINE_AA,
+        )
     if counting_line is not None:
         p1 = (round(counting_line.p1[0]), round(counting_line.p1[1]))
         p2 = (round(counting_line.p2[0]), round(counting_line.p2[1]))

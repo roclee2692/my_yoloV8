@@ -17,8 +17,9 @@ import yaml
 from people_flow import __version__
 from people_flow.assets import resolve_model_path
 from people_flow.config import RunConfig, resolve_path
-from people_flow.counting.geometry import DirectedLine, LineSide
+from people_flow.counting.geometry import DirectedLine, LineSide, PolygonRegion
 from people_flow.counting.line_counter import LineCounter
+from people_flow.counting.roi_counter import RoiCounter
 from people_flow.datasets.video_source import Frame, VideoSource
 from people_flow.detection.yolo_detector import YoloDetector
 from people_flow.errors import OutputError, PipelineError
@@ -33,6 +34,7 @@ from people_flow.outputs.csv_writer import TrackCsvWriter
 from people_flow.outputs.event_writer import EventCsvWriter
 from people_flow.outputs.evidence_writer import write_evidence_frame
 from people_flow.outputs.json_writer import write_json
+from people_flow.outputs.roi_writer import OccupancyCsvWriter, write_dwell_times_csv
 from people_flow.outputs.video_writer import AnnotatedVideoWriter
 from people_flow.tracking.track_record import TrackRecord
 from people_flow.tracking.tracker_runner import TrackerRunner
@@ -43,6 +45,9 @@ _OUTPUT_NAMES = (
     "tracks.csv",
     "run_config.yaml",
     "events.csv",
+    "occupancy.csv",
+    "dwell_times.csv",
+    "summary.json",
     "runtime_metrics.json",
     "run.log",
 )
@@ -65,12 +70,17 @@ class PipelineResult:
     run_config: Path
     events_csv: Path | None
     evidence_dir: Path | None
+    occupancy_csv: Path | None
+    dwell_times_csv: Path | None
+    summary_json: Path | None
     runtime_metrics: Path
     run_log: Path
     metrics: RuntimeMetrics
-
     total_enter: int
     total_exit: int
+    roi_total_enter: int
+    roi_total_exit: int
+    maximum_occupancy: int
 
 
 def _prepare_output_directory(output_dir: Path, *, overwrite: bool) -> Path:
@@ -119,6 +129,7 @@ def _write_run_config(
         "iou": config.iou,
         "imgsz": config.imgsz,
         "counting": config.counting.model_dump(mode="json"),
+        "roi": config.roi.model_dump(mode="json"),
         "software": {
             "people_flow": __version__,
             "python": platform.python_version(),
@@ -156,10 +167,20 @@ def _build_line_counter(config: RunConfig) -> LineCounter | None:
     )
 
 
+def _build_roi_counter(config: RunConfig) -> RoiCounter | None:
+    """Build an ROI counter only when explicit polygon geometry enables it."""
+
+    settings = config.roi
+    if not settings.enabled:
+        return None
+    region = PolygonRegion(settings.name, settings.points)
+    return RoiCounter(region, max_track_gap_frames=settings.max_track_gap_frames)
+
+
 def run_pipeline(
     config: RunConfig, *, tracker_runner: FrameTracker | None = None
 ) -> PipelineResult:
-    """Run person-only tracking and optional directional counting on a local video."""
+    """Run tracking with optional line counting and ROI occupancy analysis."""
 
     source = resolve_path(config.source, base_dir=Path.cwd())
     output_dir = _prepare_output_directory(config.output_dir, overwrite=config.overwrite)
@@ -187,8 +208,12 @@ def run_pipeline(
         model_path=model_path,
     )
     line_counter = _build_line_counter(config)
+    roi_counter = _build_roi_counter(config)
     events_path = output_dir / "events.csv" if line_counter is not None else None
     evidence_dir = output_dir / "evidence" if line_counter is not None else None
+    occupancy_path = output_dir / "occupancy.csv" if roi_counter is not None else None
+    dwell_times_path = output_dir / "dwell_times.csv" if roi_counter is not None else None
+    summary_path = output_dir / "summary.json" if roi_counter is not None else None
     reset_peak_gpu_memory(config.device)
     latencies_ms: list[float] = []
     processed_frames = 0
@@ -214,6 +239,11 @@ def run_pipeline(
                 if events_path is not None
                 else None
             )
+            occupancy_writer = (
+                stack.enter_context(OccupancyCsvWriter(occupancy_path))
+                if occupancy_path is not None
+                else None
+            )
             for video_frame in video:
                 frame_start = time.perf_counter()
                 records = tracker_runner.process(
@@ -227,12 +257,25 @@ def run_pipeline(
                     if line_counter is not None
                     else []
                 )
+                roi_snapshot = (
+                    roi_counter.process_frame(
+                        records,
+                        frame_id=video_frame.frame_id,
+                        timestamp_ms=video_frame.timestamp_ms,
+                    )
+                    if roi_counter is not None
+                    else None
+                )
+                if occupancy_writer is not None and roi_snapshot is not None:
+                    occupancy_writer.write(roi_snapshot)
                 annotated = annotate_frame(
                     video_frame.image,
                     records,
                     counting_line=line_counter.line if line_counter is not None else None,
                     total_enter=line_counter.total_enter if line_counter is not None else 0,
                     total_exit=line_counter.total_exit if line_counter is not None else 0,
+                    roi_region=roi_counter.region if roi_counter is not None else None,
+                    roi_occupancy=roi_snapshot.occupancy if roi_snapshot is not None else 0,
                 )
                 if events:
                     if event_writer is None or evidence_dir is None:
@@ -279,6 +322,20 @@ def run_pipeline(
         total_runtime_seconds=total_runtime_seconds,
     )
     metrics_path = write_json(output_dir / "runtime_metrics.json", metrics.as_dict())
+    if roi_counter is not None:
+        if dwell_times_path is None or summary_path is None:
+            raise PipelineError("ROI analysis has no configured summary outputs")
+        dwell_records = roi_counter.dwell_records()
+        write_dwell_times_csv(dwell_times_path, dwell_records)
+        roi_summary = roi_counter.build_summary(processing_fps=metrics.processing_fps)
+        write_json(summary_path, roi_summary.as_dict())
+        logger.info(
+            "ROI summary: name=%s enter=%s exit=%s max_occupancy=%s",
+            roi_counter.region.name,
+            roi_counter.total_enter,
+            roi_counter.total_exit,
+            roi_counter.maximum_occupancy,
+        )
     logger.info(
         "Completed run: frames=%s processing_fps=%.3f output=%s",
         processed_frames,
@@ -300,9 +357,15 @@ def run_pipeline(
         run_config=run_config_path,
         events_csv=events_path,
         evidence_dir=evidence_dir,
+        occupancy_csv=occupancy_path,
+        dwell_times_csv=dwell_times_path,
+        summary_json=summary_path,
         runtime_metrics=metrics_path,
         run_log=run_log,
         metrics=metrics,
         total_enter=line_counter.total_enter if line_counter is not None else 0,
         total_exit=line_counter.total_exit if line_counter is not None else 0,
+        roi_total_enter=roi_counter.total_enter if roi_counter is not None else 0,
+        roi_total_exit=roi_counter.total_exit if roi_counter is not None else 0,
+        maximum_occupancy=roi_counter.maximum_occupancy if roi_counter is not None else 0,
     )

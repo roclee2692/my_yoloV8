@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 import pytest
 
-from people_flow.config import CountingLineSettings, CountingSettings, RunConfig
+from people_flow.config import CountingLineSettings, CountingSettings, RoiSettings, RunConfig
 from people_flow.datasets.video_source import Frame
 from people_flow.pipeline import run_pipeline
 from people_flow.tracking.track_record import TrackRecord
@@ -170,3 +170,100 @@ def test_short_video_pipeline_writes_line_event_and_evidence(tmp_path: Path) -> 
     evidence = cv2.imread(str(evidence_path))
     assert evidence is not None
     assert evidence.shape[:2] == (24, 32)
+
+
+class RoiFakeTracker:
+    """Move one stable Track ID from outside to inside and outside again."""
+
+    def process(self, frame: Frame, *, frame_id: int, timestamp_ms: float) -> list[TrackRecord]:
+        """Return one observation whose foot crosses a rectangular ROI."""
+
+        foot_y = {1: 5.0, 2: 14.0, 3: 22.0}[frame_id]
+        return [
+            TrackRecord.from_bbox(
+                frame_id=frame_id,
+                timestamp_ms=timestamp_ms,
+                track_id=21,
+                class_id=0,
+                confidence=0.92,
+                bbox=(9.0, foot_y - 5.0, 15.0, foot_y),
+            )
+        ]
+
+
+@pytest.mark.slow
+def test_short_video_pipeline_writes_roi_occupancy_dwell_and_summary(tmp_path: Path) -> None:
+    """Enabled ROI analysis should emit frame, Track, and aggregate artifacts."""
+
+    source = tmp_path / "input.mp4"
+    model = tmp_path / "fake.pt"
+    output = tmp_path / "roi_run"
+    _create_video(source)
+    model.write_bytes(b"model-free-test")
+
+    result = run_pipeline(
+        RunConfig(
+            source=source,
+            model=str(model),
+            tracker="bytetrack.yaml",
+            classes=(0,),
+            output_dir=output,
+            weights_dir=tmp_path / "weights",
+            device="cpu",
+            roi=RoiSettings(
+                enabled=True,
+                name="entrance_area",
+                points=((0.0, 10.0), (31.0, 10.0), (31.0, 18.0), (0.0, 18.0)),
+                max_track_gap_frames=2,
+            ),
+        ),
+        tracker_runner=RoiFakeTracker(),
+    )
+
+    assert result.occupancy_csv is not None
+    assert result.dwell_times_csv is not None
+    assert result.summary_json is not None
+    assert result.events_csv is None
+    assert result.evidence_dir is None
+    assert result.roi_total_enter == 1
+    assert result.roi_total_exit == 1
+    assert result.maximum_occupancy == 1
+    with result.occupancy_csv.open(encoding="utf-8", newline="") as stream:
+        occupancy_rows = list(csv.DictReader(stream))
+    assert [row["occupancy"] for row in occupancy_rows] == ["0", "1", "0"]
+    assert [row["track_ids"] for row in occupancy_rows] == ["[]", "[21]", "[]"]
+    assert occupancy_rows[1]["entered_track_ids"] == "[21]"
+    assert occupancy_rows[2]["exited_track_ids"] == "[21]"
+
+    with result.dwell_times_csv.open(encoding="utf-8", newline="") as stream:
+        dwell_rows = list(csv.DictReader(stream))
+    assert len(dwell_rows) == 1
+    assert dwell_rows[0]["track_id"] == "21"
+    assert dwell_rows[0]["first_entry_frame"] == "2"
+    assert dwell_rows[0]["last_seen_frame"] == "3"
+    assert float(dwell_rows[0]["total_dwell_seconds"]) == pytest.approx(1.0 / 7.0)
+    assert dwell_rows[0]["is_inside_at_end"] == "False"
+
+    summary = json.loads(result.summary_json.read_text(encoding="utf-8"))
+    required = {
+        "total_enter",
+        "total_exit",
+        "maximum_occupancy",
+        "average_occupancy",
+        "peak_time",
+        "average_dwell_seconds",
+        "median_dwell_seconds",
+        "processed_frames",
+        "processing_fps",
+    }
+    assert required <= summary.keys()
+    assert summary["total_enter"] == 1
+    assert summary["total_exit"] == 1
+    assert summary["maximum_occupancy"] == 1
+    assert summary["average_occupancy"] == pytest.approx(1.0 / 3.0)
+    assert summary["peak_frame_id"] == 2
+    assert summary["peak_time"] == pytest.approx(1000.0 / 7.0)
+    assert summary["average_dwell_seconds"] == pytest.approx(1.0 / 7.0)
+    assert summary["median_dwell_seconds"] == pytest.approx(1.0 / 7.0)
+    assert summary["processed_frames"] == 3
+    assert summary["processing_fps"] > 0.0

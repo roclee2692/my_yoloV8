@@ -4,7 +4,7 @@
 
 ## 中文
 
-### 当前状态：V2 Phase 5
+### 当前状态：V2 Phase 6
 
 本分支已经建立可安装、可测试的 `src` layout，并实现最小可运行的人体检测与多目标跟踪管线：
 
@@ -20,9 +20,11 @@
 - 基于 Track ID 与脚点轨迹的有向虚拟线进出计数；
 - 最小轨迹年龄、最小位移、冷却帧、短时丢失恢复和同向去重；
 - 逐事件 `events.csv` 与 JPEG 证据帧；
+- 基于脚点和 Track ID 的多边形 ROI 占用、进入与离开状态；
+- 首次进入、最后出现、累计停留时间及 `occupancy.csv`、`dwell_times.csv`、`summary.json`；
 - V1 历史代码与数据来源说明的 `legacy/` 归档。
 
-ROI、停留时间和 Ground Truth 计数评测仍按后续阶段实施。当前样例没有 Ground Truth，因此 README 不声明计数准确率。
+Ground Truth 自动计数与误差评测仍按后续阶段实施。当前样例没有 Ground Truth，因此 README 不声明计数或 ROI 准确率。
 
 ### V1 历史版本
 
@@ -99,6 +101,25 @@ people-flow run \
 ```
 
 `p1 -> p2` 定义有向有限线段。坐标位于有向线左侧时为 `positive`，右侧时为 `negative`；交换 `--enter-side` 即可交换 enter/exit 定义。只有脚点运动线段实际穿过有限计数线、满足轨迹年龄与位移阈值时才产生事件。
+启用多边形 ROI 占用与停留时间：
+
+```bash
+people-flow run \
+  --source data/samples/People-counting-compressed.mp4 \
+  --model yolo26n.pt \
+  --tracker bytetrack.yaml \
+  --classes 0 \
+  --device 0 \
+  --output-dir runs/roi_demo \
+  --roi-name entrance_area \
+  --roi-point 100 100 \
+  --roi-point 1100 100 \
+  --roi-point 1100 650 \
+  --roi-point 100 650 \
+  --roi-max-track-gap-frames 30
+```
+
+每个 `--roi-point X Y` 按顺序定义一个顶点，至少需要三个点。多边形边界视为 ROI 内部；占用人数只统计当前帧真实观测到的脚点。短暂 Track 丢失可延续同一次停留，但不会被写入当前帧占用人数。
 
 输出包括：
 
@@ -108,6 +129,9 @@ runs/demo/
 ├── tracks.csv
 ├── events.csv                 # 仅启用计数时生成
 ├── evidence/                  # 每个计数事件的证据帧
+├── occupancy.csv              # 仅启用 ROI 时生成，每帧一行
+├── dwell_times.csv            # 每个进入过 ROI 的 Track 一行
+├── summary.json               # ROI 占用与停留汇总
 ├── run_config.yaml
 ├── runtime_metrics.json
 └── run.log
@@ -147,11 +171,11 @@ CI 不下载大型模型，也不依赖 GPU。
 
 ## English
 
-### Status: V2 Phase 5
+### Status: V2 Phase 6
 
-This branch contains an installable `src`-layout application, the person detection and tracking pipeline, strict MOT17 support, and directional line-crossing counts based on persistent Track IDs and bottom-center foot points. Count events include CSV evidence records and JPEG evidence frames.
+This branch contains an installable `src`-layout application, person detection and tracking, strict MOT17 support, directional line crossing, and polygon ROI analytics based on persistent Track IDs and bottom-center foot points. ROI runs emit per-frame occupancy, per-Track dwell records, and a structured summary.
 
-ROI occupancy, dwell time, and Ground Truth evaluation remain intentionally deferred. The bundled sample has no Ground Truth, so no counting-accuracy claim is made.
+Ground Truth counting and error evaluation remain intentionally deferred. The bundled sample has no Ground Truth, so no line-counting or ROI-accuracy claim is made.
 
 ### Quick start
 
@@ -162,6 +186,7 @@ people-flow validate-config --config configs/base.yaml
 python scripts/download_phase3_assets.py
 people-flow run --source data/samples/People-counting-compressed.mp4 --model yolo26n.pt --tracker bytetrack.yaml --classes 0 --device cpu --output-dir runs/demo
 people-flow run --source data/samples/People-counting-compressed.mp4 --model yolo26n.pt --tracker bytetrack.yaml --classes 0 --device 0 --output-dir runs/counting_demo --counting-line 100 500 1100 500 --enter-side positive
+people-flow run --source data/samples/People-counting-compressed.mp4 --model yolo26n.pt --tracker bytetrack.yaml --classes 0 --device 0 --output-dir runs/roi_demo --roi-name entrance_area --roi-point 100 100 --roi-point 1100 100 --roi-point 1100 650 --roi-point 100 650
 python scripts/prepare_mot17.py --root data/raw/MOT17 --split train
 python scripts/mot_sequence_to_video.py --sequence data/raw/MOT17/train/MOT17-04-SDP --output data/interim/MOT17-04-SDP.mp4
 ruff check .

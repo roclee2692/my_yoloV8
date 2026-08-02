@@ -1,4 +1,4 @@
-"""Dependency-free geometry primitives for directional line crossing."""
+"""Dependency-free geometry primitives for line crossing and polygon occupancy."""
 
 from __future__ import annotations
 
@@ -68,6 +68,88 @@ class DirectedLine:
         if destination_side is LineSide.ON_LINE:
             raise CountingError("A point on the counting line has no enter/exit direction")
         return "enter" if destination_side is self.enter_side else "exit"
+
+
+@dataclass(frozen=True, slots=True)
+class PolygonRegion:
+    """Validated simple polygon whose boundary is considered inside."""
+
+    name: str
+    points: tuple[Point, ...]
+    epsilon: float = 1e-6
+
+    def __post_init__(self) -> None:
+        normalized_name = self.name.strip()
+        if not normalized_name:
+            raise CountingError("ROI name must not be blank")
+        object.__setattr__(self, "name", normalized_name)
+        object.__setattr__(self, "points", tuple(self.points))
+        if len(self.points) < 3:
+            raise CountingError("ROI polygon requires at least three points")
+        if self.epsilon < 0:
+            raise CountingError("ROI polygon epsilon must be non-negative")
+        for point in self.points:
+            if not all(math.isfinite(coordinate) for coordinate in point):
+                raise CountingError("ROI polygon coordinates must be finite")
+        for index, point in enumerate(self.points):
+            if point == self.points[(index + 1) % len(self.points)]:
+                raise CountingError("ROI polygon cannot contain consecutive duplicate points")
+        self._validate_simple_polygon()
+        if abs(polygon_area(self.points)) <= self.epsilon:
+            raise CountingError("ROI polygon area must be greater than zero")
+
+    def contains(self, point: Point) -> bool:
+        """Return whether a point is inside or on the polygon boundary."""
+
+        if not all(math.isfinite(coordinate) for coordinate in point):
+            raise CountingError("ROI test point coordinates must be finite")
+        x, y = point
+        inside = False
+        for index, start in enumerate(self.points):
+            end = self.points[(index + 1) % len(self.points)]
+            if abs(cross_product(start, end, point)) <= self.epsilon and _point_on_segment(
+                point, start, end, self.epsilon
+            ):
+                return True
+            if (start[1] > y) != (end[1] > y):
+                intersection_x = start[0] + (y - start[1]) * (end[0] - start[0]) / (
+                    end[1] - start[1]
+                )
+                if x < intersection_x:
+                    inside = not inside
+        return inside
+
+    def _validate_simple_polygon(self) -> None:
+        edge_count = len(self.points)
+        for first_index in range(edge_count):
+            first_start = self.points[first_index]
+            first_end = self.points[(first_index + 1) % edge_count]
+            for second_index in range(first_index + 1, edge_count):
+                if second_index == first_index:
+                    continue
+                if (first_index + 1) % edge_count == second_index:
+                    continue
+                if (second_index + 1) % edge_count == first_index:
+                    continue
+                second_start = self.points[second_index]
+                second_end = self.points[(second_index + 1) % edge_count]
+                if segments_intersect(
+                    first_start,
+                    first_end,
+                    second_start,
+                    second_end,
+                    epsilon=self.epsilon,
+                ):
+                    raise CountingError("ROI polygon must not self-intersect")
+
+
+def polygon_area(points: tuple[Point, ...]) -> float:
+    """Return the signed shoelace area of an ordered polygon."""
+
+    return 0.5 * sum(
+        start[0] * end[1] - end[0] * start[1]
+        for start, end in zip(points, points[1:] + points[:1], strict=True)
+    )
 
 
 def cross_product(origin: Point, target: Point, point: Point) -> float:

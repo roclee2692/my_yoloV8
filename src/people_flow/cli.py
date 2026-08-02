@@ -13,6 +13,7 @@ from people_flow import __version__
 from people_flow.config import (
     CountingLineSettings,
     CountingSettings,
+    RoiSettings,
     RunConfig,
     SideName,
     TrackerName,
@@ -69,6 +70,21 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument(
         "--max-track-gap-frames", type=int, default=30, help="retain state across short ID gaps"
     )
+    run_parser.add_argument("--roi-name", default="entrance_area")
+    run_parser.add_argument(
+        "--roi-point",
+        action="append",
+        nargs=2,
+        type=float,
+        metavar=("X", "Y"),
+        help="enable polygon occupancy using one repeated vertex argument",
+    )
+    run_parser.add_argument(
+        "--roi-max-track-gap-frames",
+        type=int,
+        default=30,
+        help="retain ROI dwell state across short Track-ID gaps",
+    )
     return parser
 
 
@@ -104,6 +120,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                     cooldown_frames=cast(int, args.cooldown_frames),
                     max_track_gap_frames=cast(int, args.max_track_gap_frames),
                 )
+            roi_points = cast(list[list[float]] | None, args.roi_point)
+            roi = RoiSettings()
+            if roi_points is not None:
+                roi = RoiSettings(
+                    enabled=True,
+                    name=cast(str, args.roi_name),
+                    points=tuple((point[0], point[1]) for point in roi_points),
+                    max_track_gap_frames=cast(int, args.roi_max_track_gap_frames),
+                )
             run_config = RunConfig(
                 source=cast(Path, args.source),
                 model=cast(str, args.model),
@@ -117,6 +142,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 imgsz=cast(int, args.imgsz),
                 overwrite=cast(bool, args.overwrite),
                 counting=counting,
+                roi=roi,
             )
             result = run_pipeline(run_config)
         except (ValidationError, PeopleFlowError) as exc:

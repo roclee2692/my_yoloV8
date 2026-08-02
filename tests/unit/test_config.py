@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from people_flow.config import CountingSettings, load_config, resolve_path
+from people_flow.config import CountingSettings, RoiSettings, load_config, resolve_path
 from people_flow.errors import ConfigurationError
 
 
@@ -67,3 +67,17 @@ def test_counting_requires_line_when_enabled() -> None:
 
     with pytest.raises(ValidationError, match="counting.line is required"):
         CountingSettings(enabled=True)
+
+
+def test_roi_requires_valid_polygon_when_enabled() -> None:
+    """Schema validation should reject missing and self-intersecting ROI geometry."""
+
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="roi.points is required"):
+        RoiSettings(enabled=True)
+    with pytest.raises(ValidationError, match="must not self-intersect"):
+        RoiSettings(
+            enabled=True,
+            points=((0.0, 0.0), (10.0, 10.0), (0.0, 10.0), (10.0, 0.0)),
+        )
