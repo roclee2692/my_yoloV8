@@ -21,6 +21,14 @@ class VideoSourceError(PeopleFlowError):
     """Raised when a video cannot be opened or has invalid metadata."""
 
 
+class MotFormatError(PeopleFlowError):
+    """Raised when a MOT sequence is missing data or violates the MOT format."""
+
+
+class MotConversionError(PeopleFlowError):
+    """Raised when a MOT image sequence cannot be converted without frame loss."""
+
+
 class ModelInitializationError(PeopleFlowError):
     """Raised when the requested model or compute device cannot initialize."""
 

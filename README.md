@@ -4,7 +4,7 @@
 
 ## 中文
 
-### 当前状态：V2 Phase 3
+### 当前状态：V2 Phase 4
 
 本分支已经建立可安装、可测试的 `src` layout，并实现最小可运行的人体检测与多目标跟踪管线：
 
@@ -14,9 +14,12 @@
 - ByteTrack/BoT-SORT 切换、person-only 过滤和持久 Track ID；
 - 标注视频、轨迹 CSV、运行配置、运行日志和性能 JSON；
 - 无 GPU、无模型下载的 CI 单元与微型视频集成测试；
+- MOT17 `seqinfo.ini`、完整图像序列与九列 Ground Truth 的严格读取；
+- MOT17 train/test 本地完整性校验及 JSON 摘要；
+- 按源 FPS 和分辨率转换 MP4，并逐帧回读证明输入/输出帧数一致；
 - V1 历史代码与数据来源说明的 `legacy/` 归档。
 
-虚拟线计数、ROI、停留时间和 Ground Truth 评测仍按后续阶段实施。README 不填写未经真实实验得到的性能指标。
+虚拟线计数、ROI、停留时间和 Ground Truth 计数评测仍按后续阶段实施。README 不填写未经真实实验得到的性能指标。
 
 ### V1 历史版本
 
@@ -85,6 +88,19 @@ runs/demo/
 └── run.log
 ```
 
+### MOT17 数据
+
+完整 MOT17 数据集不会随仓库分发。通过 MOTChallenge 官方页面获取并解压到 `data/raw/MOT17/`，然后运行：
+
+```bash
+python scripts/prepare_mot17.py --root data/raw/MOT17 --split train
+python scripts/mot_sequence_to_video.py \
+  --sequence data/raw/MOT17/train/MOT17-04-SDP \
+  --output data/interim/MOT17-04-SDP.mp4
+```
+
+转换成功后会同时生成 `MOT17-04-SDP.summary.json`。脚本严格使用 `seqinfo.ini` 的 FPS、分辨率和帧数，并回读完整输出验证无丢帧。数据目录、官方链接、许可说明及验证规则见 `data/README.md`。
+
 ### 质量检查
 
 ```bash
@@ -106,9 +122,9 @@ CI 不下载大型模型，也不依赖 GPU。
 
 ## English
 
-### Status: V2 Phase 3
+### Status: V2 Phase 4
 
-This branch contains an installable `src`-layout application and the minimal person detection and multi-object tracking pipeline. It supports verified official YOLO26n/YOLOv8n acquisition, ByteTrack/BoT-SORT, person-only records, annotated MP4 output, CSV trajectories, effective configuration capture, logs, and runtime metrics.
+This branch contains an installable `src`-layout application, the minimal person detection and tracking pipeline, and strict MOT17 support. It reads sequence metadata and unfiltered nine-column Ground Truth, validates local train/test splits, and converts numerically ordered images to MP4 using source metadata. A successful conversion is decoded end to end to verify frame parity, FPS, and resolution.
 
 Counting, ROI occupancy, dwell time, and Ground Truth evaluation remain intentionally deferred. No unverified performance result is claimed.
 
@@ -120,6 +136,8 @@ pip install -e ".[dev]"
 people-flow validate-config --config configs/base.yaml
 python scripts/download_phase3_assets.py
 people-flow run --source data/samples/People-counting-compressed.mp4 --model yolo26n.pt --tracker bytetrack.yaml --classes 0 --device cpu --output-dir runs/demo
+python scripts/prepare_mot17.py --root data/raw/MOT17 --split train
+python scripts/mot_sequence_to_video.py --sequence data/raw/MOT17/train/MOT17-04-SDP --output data/interim/MOT17-04-SDP.mp4
 ruff check .
 pytest -q
 python -m mypy src tests
