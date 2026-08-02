@@ -33,6 +33,10 @@ class CountingError(PeopleFlowError):
     """Raised when counting geometry, state, or event evidence is invalid."""
 
 
+class EvaluationError(PeopleFlowError):
+    """Raised when Ground Truth or experiment evaluation is invalid."""
+
+
 class ModelInitializationError(PeopleFlowError):
     """Raised when the requested model or compute device cannot initialize."""
 
