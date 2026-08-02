@@ -6,8 +6,7 @@ import csv
 import json
 from pathlib import Path
 
-from scripts.evaluate_experiment import main
-
+from people_flow.evaluation.mot_evaluation_cli import main
 from people_flow.outputs.csv_writer import TrackCsvWriter
 from people_flow.tracking.track_record import TrackRecord
 
