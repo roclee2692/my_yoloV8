@@ -5,6 +5,7 @@ from __future__ import annotations
 import platform
 import shutil
 import time
+from collections.abc import Callable
 from contextlib import ExitStack
 from dataclasses import dataclass
 from importlib.metadata import version
@@ -51,6 +52,9 @@ _OUTPUT_NAMES = (
     "runtime_metrics.json",
     "run.log",
 )
+
+
+ProgressCallback = Callable[[int, int], None]
 
 
 class FrameTracker(Protocol):
@@ -178,7 +182,10 @@ def _build_roi_counter(config: RunConfig) -> RoiCounter | None:
 
 
 def run_pipeline(
-    config: RunConfig, *, tracker_runner: FrameTracker | None = None
+    config: RunConfig,
+    *,
+    tracker_runner: FrameTracker | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> PipelineResult:
     """Run tracking with optional line counting and ROI occupancy analysis."""
 
@@ -224,6 +231,8 @@ def run_pipeline(
         metadata = video.metadata
         if metadata is None:
             raise PipelineError("Video metadata was unavailable after opening the source")
+        if progress_callback is not None:
+            progress_callback(0, metadata.frame_count)
         with ExitStack() as stack:
             video_writer = stack.enter_context(
                 AnnotatedVideoWriter(
@@ -300,6 +309,8 @@ def run_pipeline(
                     event_writer.write(persisted_events)
                 video_writer.write(annotated)
                 processed_frames += 1
+                if progress_callback is not None:
+                    progress_callback(processed_frames, metadata.frame_count)
                 latencies_ms.append((time.perf_counter() - frame_start) * 1000.0)
                 if processed_frames % 100 == 0:
                     logger.info("Processed %s frames", processed_frames)

@@ -28,6 +28,11 @@ dev = [
   "types-PyYAML>=6.0.12",
 ]
 
+dashboard = [
+  "streamlit>=1.50,<2",
+  "streamlit-image-coordinates==0.4.0",
+]
+
 [project.scripts]
 people-flow = "people_flow.cli:entrypoint"
 
@@ -68,5 +73,5 @@ module = "yaml"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["cv2", "cv2.*", "torch", "torch.*", "ultralytics", "ultralytics.*"]
+module = ["cv2", "cv2.*", "torch", "torch.*", "ultralytics", "ultralytics.*", "streamlit", "streamlit.*", "streamlit_image_coordinates"]
 ignore_missing_imports = true
