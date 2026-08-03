@@ -110,6 +110,7 @@ The reproducible project `.venv` produced `71 passed` from `pytest -q` after the
 Phase 8 changes. `ruff check .`, strict `mypy src tests scripts`, compileall, and
 `pip check` also completed successfully. CI remains model-free and does not download
 weights or require a GPU.
+
 ## Failure cases and limitations
 
 - The official sample is one short scene and contains pre-existing visual overlays.

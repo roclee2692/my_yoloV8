@@ -4,7 +4,7 @@
 
 ## 中文
 
-### 当前状态：V2 Phase 8
+### 当前状态：V2 Phase 9
 
 本分支已经建立可安装、可测试的 `src` layout，并实现最小可运行的人体检测与多目标跟踪管线：
 
@@ -28,9 +28,10 @@
 - 严格 YAML 驱动的 YOLOv8n/YOLO26n 与 ByteTrack/BoT-SORT A/B/C 实验矩阵；
 - 每实验有效配置、预测与运行指标、显式 GT 可用性及聚合 `comparison.csv`；
 - 基于一对一 IoU 关联的透明 ID Switch 指标（有 MOT Ground Truth 时启用）；
+- 基于真实基线证据的 Phase 9 训练准入审计与结构化延期决策；
 - V1 历史代码与数据来源说明的 `legacy/` 归档。
 
-Phase 8 已在本地 RTX 4060 上完成真实 A/B/C 功能与运行性能基线。当前样例视频没有 Ground Truth，因此 ID Switch 与所有准确率误差均明确为 `null`，不能据此声称某模型计数更准确。
+Phase 8 已在本地 RTX 4060 上完成真实 A/B/C 功能与运行性能基线。当前样例视频没有 Ground Truth，因此 ID Switch 与所有准确率误差均明确为 `null`。Phase 9 自动准入审计据此延期训练，没有生成伪造权重、曲线或指标。
 
 ### V1 历史版本
 
@@ -191,6 +192,16 @@ $env:PYTHONPATH = (Resolve-Path src).Path
 
 三组实验只改变模型或跟踪器，其他输入、阈值、几何、设备和 seed 完全共享。输出位于 `runs/experiments/`；详细设计和本次真实结果见 `docs/architecture/PHASE8_EXPERIMENT_MATRIX.md` 与 `docs/experiments/BASELINE_RESULTS.md`。样例没有 Ground Truth 时，`evaluation.json` 不会把未知误差伪装成零。
 
+### Phase 9 训练准入
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path src).Path
+.venv\Scripts\python.exe scripts\assess_training_readiness.py `
+  --comparison runs\experiments\comparison.csv `
+  --output runs\training\phase9_readiness.json
+```
+
+当前实际结果为 `decision: deferred`、`training_allowed: false`。只有在 MOT17 Ground Truth、检测 Recall 和计数误差归因证明检测质量是主要瓶颈后，才允许启动 YOLO26n 微调。完整决策见 `docs/experiments/PHASE9_TRAINING_DECISION.md`。
 ### 质量检查
 
 ```bash
@@ -212,11 +223,11 @@ CI 不下载大型模型，也不依赖 GPU。
 
 ## English
 
-### Status: V2 Phase 8
+### Status: V2 Phase 9
 
 This branch contains an installable `src`-layout application, person detection and tracking, strict MOT17 support, directional line crossing, polygon ROI analytics, shared-algorithm Ground Truth evaluation, and a strict A/B/C model-tracker experiment matrix with per-run and aggregate artifacts.
 
-A real RTX 4060 A/B/C runtime baseline has been completed on the bundled sample. The sample has no Ground Truth, so ID switches and all accuracy-error fields remain explicitly null and no accuracy ranking is claimed.
+A real RTX 4060 A/B/C runtime baseline has been completed on the bundled sample. Because it has no Ground Truth, the Phase 9 readiness gate deferred training. No training run, weight, curve, or validation metric was fabricated.
 
 ### Quick start
 
@@ -232,6 +243,7 @@ python scripts/prepare_mot17.py --root data/raw/MOT17 --split train
 python scripts/mot_sequence_to_video.py --sequence data/raw/MOT17/train/MOT17-04-SDP --output data/interim/MOT17-04-SDP.mp4
 python scripts/evaluate_experiment.py --mot-sequence data/raw/MOT17/train/MOT17-04-SDP --predicted-tracks runs/MOT17-04-SDP/tracks.csv --output-dir runs/MOT17-04-SDP/evaluation --counting-line 100 500 1100 500 --roi-point 100 100 --roi-point 1100 100 --roi-point 1100 650 --roi-point 100 650
 python scripts/run_baseline.py --config configs/experiments/baseline.yaml --project-root .
+python scripts/assess_training_readiness.py --comparison runs/experiments/comparison.csv --output runs/training/phase9_readiness.json
 ruff check .
 pytest -q
 python -m mypy src tests scripts
