@@ -70,7 +70,8 @@ def test_dashboard_renders_persisted_results_and_gt_warning(
 
     _create_render_fixture(tmp_path)
     monkeypatch.setenv("PEOPLE_FLOW_PROJECT_ROOT", str(tmp_path))  # type: ignore[attr-defined]
-    app = AppTest.from_file("dashboard/app.py", default_timeout=20).run()
+    app_path = Path(__file__).resolve().parents[2] / "dashboard" / "app.py"
+    app = AppTest.from_file(app_path, default_timeout=20).run()
     app.selectbox[0].select("yolov8n.pt").run()
 
     assert not app.exception
