@@ -29,7 +29,7 @@ dev = [
 ]
 
 dashboard = [
-  "streamlit>=1.50,<2",
+  "streamlit>=1.50,<1.61",
   "streamlit-image-coordinates==0.4.0",
 ]
 
