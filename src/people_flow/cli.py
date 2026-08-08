@@ -22,6 +22,7 @@ from people_flow.config import (
 from people_flow.errors import ConfigurationError, PeopleFlowError
 from people_flow.logging import configure_logging
 from people_flow.pipeline import run_pipeline
+from people_flow.reporting.cli import add_report_arguments, run_from_args
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -85,6 +86,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=30,
         help="retain ROI dwell state across short Track-ID gaps",
     )
+    report_parser = subparsers.add_parser(
+        "report", help="generate a structured Phase 11 analysis report"
+    )
+    add_report_arguments(report_parser)
     return parser
 
 
@@ -102,6 +107,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "version":
         logger.info("people-flow-analytics %s", __version__)
         return 0
+
+    if args.command == "report":
+        return run_from_args(args)
 
     if args.command == "run":
         try:

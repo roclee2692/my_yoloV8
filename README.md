@@ -4,7 +4,7 @@
 
 ## 中文
 
-### 当前状态：V2 Phase 10
+### 当前状态：V2 Phase 11
 
 本分支已经建立可安装、可测试的 `src` layout，并实现最小可运行的人体检测与多目标跟踪管线：
 
@@ -30,9 +30,10 @@
 - 基于一对一 IoU 关联的透明 ID Switch 指标（有 MOT Ground Truth 时启用）；
 - 基于真实基线证据的 Phase 9 训练准入审计与结构化延期决策；
 - 调用核心 API 的 Streamlit Dashboard、可视化几何配置、进度、视频、KPI、图表与结果下载；
+- 仅使用三个结构化 JSON 的防编造 LLM 报告管线、Markdown 报告与 Dashboard 下载；
 - V1 历史代码与数据来源说明的 `legacy/` 归档。
 
-Phase 8 已在本地 RTX 4060 上完成真实 A/B/C 功能与运行性能基线。当前样例视频没有 Ground Truth，因此 ID Switch 与所有准确率误差均明确为 `null`。Phase 9 自动准入审计据此延期训练，没有生成伪造权重、曲线或指标。Phase 10 已增加本地 Web Dashboard；页面读取真实 CSV/JSON 产物，并持续显示 Ground Truth 可用性。
+Phase 8 已在本地 RTX 4060 上完成真实 A/B/C 功能与运行性能基线。当前样例视频没有 Ground Truth，因此 ID Switch 与所有准确率误差均明确为 `null`。Phase 9 自动准入审计据此延期训练，没有生成伪造权重、曲线或指标。Phase 10 已增加本地 Web Dashboard；页面读取真实 CSV/JSON 产物，并持续显示 Ground Truth 可用性。Phase 11 已增加结构化报告管线；外部 LLM 仅生成无数字叙述，所有指标由经过校验的 JSON 确定性写入。
 
 ### V1 历史版本
 
@@ -213,6 +214,18 @@ $env:PEOPLE_FLOW_PROJECT_ROOT = (Resolve-Path .).Path
 
 浏览器打开 `http://localhost:8501`。界面支持 MP4 上传、模型/跟踪器/置信度/设备选择、首帧点击绘制计数线与 ROI、处理进度、标注视频、KPI、人流与停留时间图表、实验对比及结果下载。Dashboard 只调用核心 Python API；没有 Ground Truth 时会显示明确警告。完整设计见 `docs/architecture/PHASE10_DASHBOARD.md`。
 
+### Phase 11 结构化 LLM 报告
+
+离线、无密钥的可复现模式：
+
+```powershell
+people-flow report `
+  --run-dir runs\experiments\C_yolo26n_botsort `
+  --provider deterministic
+```
+
+输出为同一运行目录下的 `report.md` 与 `report_metadata.json`。确定性模式会明确记录 `llm_used: false`，不会冒充外部模型调用。若使用显式配置的 OpenAI-compatible endpoint，API Key 只从 `--api-key-env` 指定的环境变量读取。LLM 只能返回不含数字的解释文本；视频、轨迹 CSV 和证据帧不会进入提示词，精确指标全部由结构化数据渲染。完整设计见 `docs/architecture/PHASE11_LLM_REPORT.md`。
+
 ### 质量检查
 
 ```bash
@@ -234,11 +247,11 @@ CI 不下载大型模型，也不依赖 GPU。
 
 ## English
 
-### Status: V2 Phase 10
+### Status: V2 Phase 11
 
 This branch contains an installable `src`-layout application, person detection and tracking, strict MOT17 support, directional line crossing, polygon ROI analytics, shared-algorithm Ground Truth evaluation, and a strict A/B/C model-tracker experiment matrix with per-run and aggregate artifacts.
 
-A real RTX 4060 A/B/C runtime baseline has been completed on the bundled sample. Because it has no Ground Truth, the Phase 9 readiness gate deferred training. No training run, weight, curve, or validation metric was fabricated. Phase 10 adds a local Streamlit Dashboard that calls the core API and renders persisted artifacts with an explicit Ground Truth caveat.
+A real RTX 4060 A/B/C runtime baseline has been completed on the bundled sample. Because it has no Ground Truth, the Phase 9 readiness gate deferred training. No training run, weight, curve, or validation metric was fabricated. Phase 10 adds a local Streamlit Dashboard that calls the core API and renders persisted artifacts with an explicit Ground Truth caveat. Phase 11 adds a structured report pipeline in which optional LLM prose cannot introduce numeric claims; exact values come only from validated JSON evidence.
 
 ### Quick start
 
@@ -256,6 +269,7 @@ python scripts/evaluate_experiment.py --mot-sequence data/raw/MOT17/train/MOT17-
 python scripts/run_baseline.py --config configs/experiments/baseline.yaml --project-root .
 python scripts/assess_training_readiness.py --comparison runs/experiments/comparison.csv --output runs/training/phase9_readiness.json
 python -m streamlit run dashboard/app.py
+people-flow report --run-dir runs/experiments/C_yolo26n_botsort --provider deterministic
 ruff check .
 pytest -q
 python -m mypy src tests scripts

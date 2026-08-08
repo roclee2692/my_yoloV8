@@ -277,6 +277,23 @@ def _render_result(data: DashboardRunData) -> None:
     if data.dwell_times:
         st.markdown("#### 停留时间明细")
         st.dataframe(data.dwell_times, width="stretch", hide_index=True)
+    if data.report_markdown is not None and data.report_metadata is not None:
+        with st.expander("结构化分析报告", expanded=False):
+            if data.report_metadata.get("llm_used") is True:
+                st.success(
+                    f"报告叙述由已配置 LLM 生成：{data.report_metadata.get('model', 'unknown')}"
+                )
+            else:
+                st.info("此报告使用确定性离线叙述；没有冒充外部 LLM 调用。")
+            st.markdown(data.report_markdown)
+            st.download_button(
+                "下载 report.md",
+                data=data.report_markdown.encode("utf-8"),
+                file_name="report.md",
+                mime="text/markdown",
+            )
+    else:
+        st.info("尚未生成 Phase 11 报告；可使用 people-flow report 命令生成。")
     archive = build_results_archive(data)
     st.download_button(
         "下载本次运行全部结果（ZIP）",

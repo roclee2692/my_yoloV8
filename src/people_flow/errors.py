@@ -36,8 +36,13 @@ class CountingError(PeopleFlowError):
 class EvaluationError(PeopleFlowError):
     """Raised when Ground Truth or experiment evaluation is invalid."""
 
+
 class DashboardError(PeopleFlowError):
     """Raised when Dashboard input, geometry, or persisted artifacts are invalid."""
+
+
+class ReportGenerationError(PeopleFlowError):
+    """Raised when structured report evidence, LLM output, or persistence is invalid."""
 
 
 class ModelInitializationError(PeopleFlowError):

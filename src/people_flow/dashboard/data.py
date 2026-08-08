@@ -10,7 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from people_flow.errors import DashboardError
+from people_flow.errors import DashboardError, ReportGenerationError
+from people_flow.reporting.evidence import load_report_evidence
 
 _REQUIRED_RUN_FILES = (
     "annotated.mp4",
@@ -34,6 +35,8 @@ class DashboardRunData:
     runtime: dict[str, Any]
     summary: dict[str, Any] | None
     evaluation: dict[str, Any] | None
+    report_markdown: str | None
+    report_metadata: dict[str, Any] | None
 
     @property
     def processed_frames(self) -> int:
@@ -159,6 +162,25 @@ def load_run_dashboard(run_dir: Path) -> DashboardRunData:
     dwell_times = _read_csv_optional(resolved / "dwell_times.csv")
     summary = _read_json_optional(resolved / "summary.json")
     evaluation = _read_json_optional(resolved / "evaluation.json")
+    report_path = resolved / "report.md"
+    report_metadata_path = resolved / "report_metadata.json"
+    if report_path.is_file() != report_metadata_path.is_file():
+        raise DashboardError("report.md and report_metadata.json must exist together")
+    report_markdown = _read_text(report_path) if report_path.is_file() else None
+    report_metadata = _read_json_optional(report_metadata_path)
+    if report_metadata is not None:
+        if report_metadata.get("raw_video_read") is not False:
+            raise DashboardError("Report metadata must confirm raw_video_read is false")
+        if evaluation is not None and report_metadata.get(
+            "ground_truth_available"
+        ) != evaluation.get("ground_truth_available"):
+            raise DashboardError("Report and evaluation Ground Truth states do not match")
+        try:
+            current_fingerprint = load_report_evidence(resolved).fingerprint
+        except ReportGenerationError as exc:
+            raise DashboardError(f"Report evidence is invalid: {exc}") from exc
+        if report_metadata.get("evidence_sha256") != current_fingerprint:
+            raise DashboardError("Report evidence fingerprint does not match current run JSON")
     processed_frames = _as_int(runtime, "processed_frames")
     if occupancy and len(occupancy) != processed_frames:
         raise DashboardError(
@@ -182,6 +204,8 @@ def load_run_dashboard(run_dir: Path) -> DashboardRunData:
         runtime=runtime,
         summary=summary,
         evaluation=evaluation,
+        report_markdown=report_markdown,
+        report_metadata=report_metadata,
     )
 
 
@@ -224,6 +248,13 @@ def _read_csv(path: Path) -> tuple[dict[str, str], ...]:
             return tuple(dict(row) for row in csv.DictReader(stream))
     except OSError as exc:
         raise DashboardError(f"Unable to read dashboard CSV: {path}") from exc
+
+
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise DashboardError(f"Unable to read dashboard text: {path}") from exc
 
 
 def _read_json_optional(path: Path) -> dict[str, Any] | None:
