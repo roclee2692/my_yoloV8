@@ -27,12 +27,14 @@ from people_flow.dashboard.service import (
     load_video_preview,
     map_display_point,
     persist_uploaded_mp4,
+    resolve_dashboard_output_dir,
     run_dashboard_job,
     validate_run_id,
 )
 from people_flow.errors import PeopleFlowError
 
-_APP_TITLE = "基于 YOLO26 与多目标跟踪的人流分析系统"
+_APP_TITLE = "People Flow Analytics with YOLO26 and Multi-Object Tracking"
+_APP_SUBTITLE = "基于 YOLO26 与多目标跟踪的固定摄像头人流分析系统"
 
 
 def _project_root() -> Path:
@@ -179,9 +181,15 @@ def _render_run_tab(root: Path) -> None:
         if torch.cuda.is_available():
             devices.insert(0, "0")
         device = st.selectbox("计算设备", devices, index=0)
+        if not torch.cuda.is_available():
+            st.caption(
+                "当前启动 Dashboard 的 Python 环境未启用 CUDA，因此只提供 CPU；"
+                "请使用已启用 CUDA 的 Python 环境启动页面以选择 device 0。"
+            )
         default_run_id = "dashboard_yolo26_bytetrack"
         run_id = st.text_input("运行 ID", value=default_run_id)
         overwrite = st.checkbox("覆盖同名输出目录", value=False)
+        st.caption("未勾选覆盖时，同名运行会自动保存为 _002、_003 等新目录。")
 
     if source is None:
         with right:
@@ -194,9 +202,13 @@ def _render_run_tab(root: Path) -> None:
         return
     try:
         validated_run_id = validate_run_id(run_id)
+        output_dir = resolve_dashboard_output_dir(
+            root / "runs" / "dashboard" / validated_run_id,
+            overwrite=overwrite,
+        )
         request = DashboardRunRequest(
             source=source,
-            output_dir=root / "runs" / "dashboard" / validated_run_id,
+            output_dir=output_dir,
             model=model,
             tracker=cast(TrackerName, tracker_value),
             device=device,
@@ -365,9 +377,9 @@ def _render_experiments_tab(root: Path) -> None:
 def run_app() -> None:
     """Render the complete Streamlit Dashboard."""
 
-    st.set_page_config(page_title="People Flow Analytics", page_icon="🚶", layout="wide")
+    st.set_page_config(page_title=_APP_TITLE, page_icon="🚶", layout="wide")
     st.title(_APP_TITLE)
-    st.caption("People Flow Analytics with YOLO26 and Multi-Object Tracking")
+    st.caption(_APP_SUBTITLE)
     st.info("先配置视频与几何区域，再运行核心管线；所有指标均来自落盘的 CSV/JSON 文件。")
     root = _project_root()
     run_tab, results_tab, experiments_tab = st.tabs(("运行分析", "结果与下载", "实验对比"))

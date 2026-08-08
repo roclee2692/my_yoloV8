@@ -205,6 +205,23 @@ def validate_run_id(value: str) -> str:
     return normalized
 
 
+def resolve_dashboard_output_dir(requested: Path, *, overwrite: bool) -> Path:
+    """Return a non-destructive output directory for a Dashboard run.
+
+    When overwrite is disabled, an existing requested directory is preserved and
+    the next available numbered suffix is selected.
+    """
+
+    resolved = requested.expanduser().resolve()
+    if overwrite or not resolved.exists():
+        return resolved
+    for index in range(2, 10_000):
+        candidate = resolved.with_name(f"{resolved.name}_{index:03d}")
+        if not candidate.exists():
+            return candidate
+    raise DashboardError(f"Unable to allocate a new output directory for: {resolved}")
+
+
 def run_dashboard_job(
     request: DashboardRunRequest,
     *,

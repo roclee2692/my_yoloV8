@@ -75,7 +75,13 @@ def test_dashboard_renders_persisted_results_and_gt_warning(
     app.selectbox[0].select("yolov8n.pt").run()
 
     assert not app.exception
-    assert app.title[0].value == "基于 YOLO26 与多目标跟踪的人流分析系统"
+    assert app.title[0].value == (
+        "People Flow Analytics with YOLO26 and Multi-Object Tracking"
+    )
+    assert any(
+        caption.value == "基于 YOLO26 与多目标跟踪的固定摄像头人流分析系统"
+        for caption in app.caption
+    )
     assert any("Ground Truth" in warning.value for warning in app.warning)
     assert [metric.label for metric in app.metric] == [
         "当前 ROI 人数",

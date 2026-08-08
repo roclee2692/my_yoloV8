@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="people-flow",
-        description="People Flow Analytics command line interface",
+        description="People Flow Analytics with YO26 and Multi-Object Tracking",
     )
     subparsers = parser.add_subparsers(dest="command")
 

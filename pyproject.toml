@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "people-flow-analytics"
 version = "2.0.0a0"
-description = "People flow analytics with YOLO26 and multi-object tracking"
+description = "People Flow Analytics with YOLO26 and Multi-Object Tracking"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

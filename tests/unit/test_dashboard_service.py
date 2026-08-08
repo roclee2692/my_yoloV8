@@ -15,6 +15,7 @@ from people_flow.dashboard.service import (
     load_video_preview,
     map_display_point,
     persist_uploaded_mp4,
+    resolve_dashboard_output_dir,
     run_dashboard_job,
     validate_run_id,
 )
@@ -113,3 +114,16 @@ def test_validate_run_id_rejects_non_portable_paths(value: str) -> None:
 
     with pytest.raises(DashboardError, match="Run ID"):
         validate_run_id(value)
+
+
+def test_resolve_dashboard_output_dir_preserves_previous_runs(tmp_path: Path) -> None:
+    """Repeated runs should receive a new suffix instead of overwriting evidence."""
+
+    requested = tmp_path / "dashboard_yolo26_bytetrack"
+    requested.mkdir()
+    (tmp_path / "dashboard_yolo26_bytetrack_002").mkdir()
+
+    assert resolve_dashboard_output_dir(requested, overwrite=False) == (
+        tmp_path / "dashboard_yolo26_bytetrack_003"
+    )
+    assert resolve_dashboard_output_dir(requested, overwrite=True) == requested

@@ -212,7 +212,7 @@ $env:PEOPLE_FLOW_PROJECT_ROOT = (Resolve-Path .).Path
 .venv\Scripts\python.exe -m streamlit run dashboard\app.py
 ```
 
-浏览器打开 `http://localhost:8501`。界面支持 MP4 上传、模型/跟踪器/置信度/设备选择、首帧点击绘制计数线与 ROI、处理进度、标注视频、KPI、人流与停留时间图表、实验对比及结果下载。Dashboard 只调用核心 Python API；没有 Ground Truth 时会显示明确警告。完整设计见 `docs/architecture/PHASE10_DASHBOARD.md`。
+浏览器打开 `http://localhost:8501`。界面支持 MP4 上传、模型/跟踪器/置信度/设备选择、首帧点击绘制计数线与 ROI、处理进度、标注视频、KPI、人流与停留时间图表、实验对比及结果下载。Dashboard 只调用核心 Python API；没有 Ground Truth 时会显示明确警告。完整设计见 `docs/architecture/PHASE10_DASHBOARD.md`。 未勾选覆盖时，重复使用同一运行 ID 会自动创建 `_002`、`_003` 等新目录，因此可以连续运行且不会覆盖旧证据。设备列表取决于启动 Dashboard 的 Python 环境；只有该环境的 `torch.cuda.is_available()` 为真时才显示 CUDA device `0`。
 
 ### Phase 11 结构化 LLM 报告
 
